@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+
+from aiogithubapi import GitHubRepositoryModel
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -16,7 +17,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import DOMAIN
+from .const import DOMAIN, IssuesPulls
 from .coordinator import (
     CoordinatorKeyType,
     DataUpdateCoordinators,
@@ -29,25 +30,57 @@ from .entity import GitHubEntity
 
 
 @dataclass
-class GitHubSensorEntityDescriptionMixin:
-    """Mixin for required GitHub description keys."""
+class GitHubSensorBaseEntityDescriptionMixin:
+    """Mixin for required GitHub base description keys."""
 
     coordinator_key: CoordinatorKeyType
-    value_fn: Callable[[Any], StateType]
 
 
 @dataclass
-class GitHubSensorEntityDescription(
-    SensorEntityDescription, GitHubSensorEntityDescriptionMixin
+class GitHubSensorInformationEntityDescriptionMixin(
+    GitHubSensorBaseEntityDescriptionMixin
 ):
-    """Describes GitHub sensor entity."""
+    """Mixin for required GitHub information description keys."""
+
+    value_fn: Callable[[GitHubRepositoryModel], StateType]
+
+
+@dataclass
+class GitHubSensorIssueEntityDescriptionMixin(GitHubSensorBaseEntityDescriptionMixin):
+    """Mixin for required GitHub information description keys."""
+
+    value_fn: Callable[[IssuesPulls], StateType]
+
+
+@dataclass
+class GitHubSensorBaseEntityDescription(SensorEntityDescription):
+    """Describes GitHub sensor entity default overrides."""
 
     icon: str = "mdi:github"
     entity_registry_enabled_default: bool = False
 
 
-SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
-    GitHubSensorEntityDescription(
+@dataclass
+class GitHubSensorInformationEntityDescription(
+    GitHubSensorBaseEntityDescription,
+    GitHubSensorInformationEntityDescriptionMixin,
+):
+    """Describes GitHub informatio sensor entity."""
+
+
+@dataclass
+class GitHubSensorIssueEntityDescription(
+    GitHubSensorBaseEntityDescription,
+    GitHubSensorIssueEntityDescriptionMixin,
+):
+    """Describes GitHub issue sensor entity."""
+
+
+SENSOR_DESCRIPTIONS: tuple[
+    GitHubSensorInformationEntityDescription | GitHubSensorIssueEntityDescription,
+    ...,
+] = (
+    GitHubSensorInformationEntityDescription(
         key="stargazers_count",
         name="Stars",
         icon="mdi:star",
@@ -57,7 +90,7 @@ SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
         value_fn=lambda data: data.stargazers_count,
         coordinator_key="information",
     ),
-    GitHubSensorEntityDescription(
+    GitHubSensorInformationEntityDescription(
         key="subscribers_count",
         name="Subscribers",
         icon="mdi:glasses",
@@ -67,7 +100,7 @@ SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
         value_fn=lambda data: data.subscribers_count,
         coordinator_key="information",
     ),
-    GitHubSensorEntityDescription(
+    GitHubSensorInformationEntityDescription(
         key="forks_count",
         name="Forks",
         icon="mdi:source-fork",
@@ -77,7 +110,7 @@ SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
         value_fn=lambda data: data.forks_count,
         coordinator_key="information",
     ),
-    GitHubSensorEntityDescription(
+    GitHubSensorInformationEntityDescription(
         key="default_branch",
         name="Default branch",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -85,7 +118,7 @@ SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
         value_fn=lambda data: data.default_branch,
         coordinator_key="information",
     ),
-    GitHubSensorEntityDescription(
+    GitHubSensorIssueEntityDescription(
         key="issues_count",
         name="Issues",
         native_unit_of_measurement="Issues",
@@ -94,7 +127,7 @@ SENSOR_DESCRIPTIONS: tuple[GitHubSensorEntityDescription, ...] = (
         value_fn=lambda data: len(data.issues),
         coordinator_key="issue",
     ),
-    GitHubSensorEntityDescription(
+    GitHubSensorIssueEntityDescription(
         key="pulls_count",
         name="Pull Requests",
         native_unit_of_measurement="Pull Requests",
@@ -142,17 +175,19 @@ class GitHubSensorDescriptionEntity(GitHubSensorBaseEntity):
     """Defines a GitHub sensor entity based on entity descriptions."""
 
     coordinator: GitHubBaseDataUpdateCoordinator
-    entity_description: GitHubSensorEntityDescription
+    entity_description: GitHubSensorInformationEntityDescription | GitHubSensorIssueEntityDescription
 
     def __init__(
         self,
         coordinators: DataUpdateCoordinators,
-        description: GitHubSensorEntityDescription,
+        description: GitHubSensorInformationEntityDescription
+        | GitHubSensorIssueEntityDescription,
     ) -> None:
         """Initialize a GitHub sensor entity."""
-        self.entity_description = description
         _coordinator = coordinators[description.coordinator_key]
+
         super().__init__(coordinator=_coordinator)
+        self.entity_description = description
         self._attr_name = f"{_coordinator.repository} {description.name}"
         self._attr_unique_id = f"{_coordinator.repository}_{description.key}"
 
@@ -172,16 +207,17 @@ class GitHubSensorLatestBaseEntity(GitHubSensorBaseEntity):
 
     def __init__(self, coordinators: DataUpdateCoordinators) -> None:
         """Initialize a GitHub sensor entity."""
-        coordinator = coordinators[self._coordinator_key]
-        super().__init__(coordinator=coordinator)
-        self._attr_name = f"{coordinator.repository} {self._name}"
+        _coordinator = coordinators[self._coordinator_key]
+
+        super().__init__(coordinator=_coordinator)
+        self._attr_name = f"{_coordinator.repository} {self._name}"
         self._attr_unique_id = (
-            f"{coordinator.repository}_{self._name.lower().replace(' ', '_')}"
+            f"{_coordinator.repository}_{self._name.lower().replace(' ', '_')}"
         )
 
 
 class GitHubSensorLatestReleaseEntity(GitHubSensorLatestBaseEntity):
-    """Defines a GitHub release sensor entity."""
+    """Defines a GitHub latest release sensor entity."""
 
     _coordinator_key: CoordinatorKeyType = "release"
     _name: str = "Latest Release"
@@ -206,7 +242,7 @@ class GitHubSensorLatestReleaseEntity(GitHubSensorLatestBaseEntity):
 
 
 class GitHubSensorLatestIssueEntity(GitHubSensorLatestBaseEntity):
-    """Defines a GitHub issue sensor entity."""
+    """Defines a GitHub latest issue sensor entity."""
 
     _name: str = "Latest Issue"
     _coordinator_key: CoordinatorKeyType = "issue"
@@ -234,7 +270,7 @@ class GitHubSensorLatestIssueEntity(GitHubSensorLatestBaseEntity):
 
 
 class GitHubSensorLatestPullEntity(GitHubSensorLatestBaseEntity):
-    """Defines a GitHub pull sensor entity."""
+    """Defines a GitHub latest pull sensor entity."""
 
     _coordinator_key: CoordinatorKeyType = "issue"
     _name: str = "Latest Pull Request"
@@ -262,7 +298,7 @@ class GitHubSensorLatestPullEntity(GitHubSensorLatestBaseEntity):
 
 
 class GitHubSensorLatestCommitEntity(GitHubSensorLatestBaseEntity):
-    """Defines a GitHub commit sensor entity."""
+    """Defines a GitHub latest commit sensor entity."""
 
     _coordinator_key: CoordinatorKeyType = "commit"
     _name: str = "Latest Commit"
@@ -280,5 +316,4 @@ class GitHubSensorLatestCommitEntity(GitHubSensorLatestBaseEntity):
         return {
             "sha": self.coordinator.data.sha,
             "url": self.coordinator.data.html_url,
-            "author": self.coordinator.data.author.login,
         }

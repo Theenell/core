@@ -4,7 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from homeassistant.components.github.const import DEFAULT_REPOSITORIES, DOMAIN
+from homeassistant.components.github.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_REPOSITORIES,
+    DEFAULT_REPOSITORIES,
+    DOMAIN,
+)
 
 from .common import MOCK_ACCESS_TOKEN
 
@@ -17,11 +22,8 @@ def mock_config_entry() -> MockConfigEntry:
     return MockConfigEntry(
         title="",
         domain=DOMAIN,
-        data={
-            "access_token": MOCK_ACCESS_TOKEN,
-            "scope": "",
-        },
-        options={"repositories": DEFAULT_REPOSITORIES},
+        data={CONF_ACCESS_TOKEN: MOCK_ACCESS_TOKEN},
+        options={CONF_REPOSITORIES: DEFAULT_REPOSITORIES},
     )
 
 

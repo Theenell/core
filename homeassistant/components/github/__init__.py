@@ -6,14 +6,14 @@ import asyncio
 from aiogithubapi import GitHubAPI
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_ACCESS_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import (
     SERVER_SOFTWARE,
     async_get_clientsession,
 )
 
-from .const import DOMAIN
+from .const import CONF_REPOSITORIES, DOMAIN
 from .coordinator import (
     DataUpdateCoordinators,
     RepositoryCommitDataUpdateCoordinator,
@@ -30,12 +30,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     client = GitHubAPI(
-        token=entry.data["access_token"],
+        token=entry.data[CONF_ACCESS_TOKEN],
         session=async_get_clientsession(hass),
         **{"client_name": SERVER_SOFTWARE},
     )
 
-    repositories: list[str] = entry.options["repositories"]
+    repositories: list[str] = entry.options[CONF_REPOSITORIES]
 
     for repository in repositories:
         coordinators: DataUpdateCoordinators = {
@@ -71,8 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data.pop(DOMAIN)
     return unload_ok
 

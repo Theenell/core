@@ -2,7 +2,12 @@
 import datetime
 
 from homeassistant import config_entries
-from homeassistant.components.github.const import DEFAULT_REPOSITORIES, DOMAIN
+from homeassistant.components.github.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_REPOSITORIES,
+    DEFAULT_REPOSITORIES,
+    DOMAIN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import (
     RESULT_TYPE_ABORT,
@@ -10,7 +15,7 @@ from homeassistant.data_entry_flow import (
     RESULT_TYPE_SHOW_PROGRESS,
 )
 
-from .common import MOCK_ACCESS_TOKEN, load_json_fixture
+from .common import MOCK_ACCESS_TOKEN
 
 from tests.common import MockConfigEntry, async_fire_time_changed
 from tests.test_util.aiohttp import AiohttpClientMocker
@@ -24,14 +29,21 @@ async def test_full_user_flow_implementation(
     """Test the full manual user flow from start to finish."""
     aioclient_mock.post(
         "https://github.com/login/device/code",
-        json=load_json_fixture("oauth_device_code"),
+        json={
+            "device_code": "3584d83530557fdd1f46af8289938c8ef79f9dc5",
+            "user_code": "WDJB-MJHT",
+            "verification_uri": "https://github.com/login/device",
+            "expires_in": 900,
+            "interval": 5,
+        },
         headers={"Content-Type": "application/json"},
     )
     aioclient_mock.post(
         "https://github.com/login/oauth/access_token",
         json={
-            **load_json_fixture("oauth_access_token"),
-            "access_token": MOCK_ACCESS_TOKEN,
+            CONF_ACCESS_TOKEN: MOCK_ACCESS_TOKEN,
+            "token_type": "bearer",
+            "scope": "",
         },
         headers={"Content-Type": "application/json"},
     )
@@ -55,17 +67,16 @@ async def test_full_user_flow_implementation(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={
-            "repositories": DEFAULT_REPOSITORIES,
+            CONF_REPOSITORIES: DEFAULT_REPOSITORIES,
         },
     )
 
     assert result["title"] == ""
     assert result["type"] == RESULT_TYPE_CREATE_ENTRY
     assert "data" in result
-    assert result["data"]["access_token"] == MOCK_ACCESS_TOKEN
-    assert result["data"]["scope"] == ""
+    assert result["data"][CONF_ACCESS_TOKEN] == MOCK_ACCESS_TOKEN
     assert "options" in result
-    assert result["options"]["repositories"] == DEFAULT_REPOSITORIES
+    assert result["options"][CONF_REPOSITORIES] == DEFAULT_REPOSITORIES
 
 
 async def test_already_configured(

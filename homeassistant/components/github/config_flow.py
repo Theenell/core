@@ -24,13 +24,17 @@ from homeassistant.helpers.aiohttp_client import (
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.event import async_call_later
 
-from .const import CLIENT_ID, DEFAULT_REPOSITORIES, DOMAIN, LOGGER
+from .const import (
+    CLIENT_ID,
+    CONF_ACCESS_TOKEN,
+    CONF_REPOSITORIES,
+    DEFAULT_REPOSITORIES,
+    DOMAIN,
+    LOGGER,
+)
 
 
-async def _stared_repositories(
-    hass: HomeAssistant,
-    access_token: str,
-) -> list[str]:
+async def _stared_repositories(hass: HomeAssistant, access_token: str) -> list[str]:
     """Return a list of repositories that the user has starred."""
     client = GitHubAPI(token=access_token, session=async_get_clientsession(hass))
 
@@ -73,7 +77,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._login_device: GitHubLoginDeviceModel | None = None
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
         """Handle the initial step."""
         if self._async_current_entries():
@@ -134,7 +139,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="repositories",
                 data_schema=vol.Schema(
                     {
-                        vol.Required("repositories"): cv.multi_select(
+                        vol.Required(CONF_REPOSITORIES): cv.multi_select(
                             {k: k for k in repositories}
                         ),
                     }
@@ -143,11 +148,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_create_entry(
             title="",
-            data={
-                "access_token": self._activation.access_token,
-                "scope": self._activation.scope,
-            },
-            options={"repositories": user_input["repositories"]},
+            data={CONF_ACCESS_TOKEN: self._activation.access_token},
+            options={CONF_REPOSITORIES: user_input[CONF_REPOSITORIES]},
         )
 
     @staticmethod
@@ -168,10 +170,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Handle options flow."""
         if not user_input:
             configured_repositories: list[str] = self.config_entry.options[
-                "repositories"
+                CONF_REPOSITORIES
             ]
             repositories = await _stared_repositories(
-                self.hass, self.config_entry.data["access_token"]
+                self.hass, self.config_entry.data[CONF_ACCESS_TOKEN]
             )
 
             # In case the user has removed a starred repository that is already tracked
@@ -184,7 +186,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 data_schema=vol.Schema(
                     {
                         vol.Required(
-                            "repositories",
+                            CONF_REPOSITORIES,
                             default=configured_repositories,
                         ): cv.multi_select({k: k for k in repositories}),
                     }
